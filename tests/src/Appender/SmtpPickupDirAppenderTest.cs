@@ -28,6 +28,7 @@ using log4net.Core;
 using log4net.Layout;
 
 using NUnit.Framework;
+using System.Globalization;
 
 namespace log4net.Tests.Appender
 {
@@ -167,6 +168,39 @@ namespace log4net.Tests.Appender
 			h.ResetConfiguration();
 			//Replace the repository selector so that we can recreate the hierarchy with the same name if necessary
 			LoggerManager.RepositorySelector = new DefaultRepositorySelector(typeof(log4net.Repository.Hierarchy.Hierarchy));
+		}
+
+		/// <summary>
+		/// Verifies that logging a message actually produces output
+		/// </summary>
+		[Test]
+		public void TestOutputContainsSentDate()
+		{
+			SilentErrorHandler sh = new SilentErrorHandler();
+			SmtpPickupDirAppender appender = CreateSmtpPickupDirAppender(sh);
+			ILogger log = CreateLogger(appender);
+			log.Log(GetType(), Level.Info, "This is a message", null);
+			log.Log(GetType(), Level.Info, "This is a message 2", null);
+			DestroyLogger();
+
+			Assert.AreEqual(1, Directory.GetFiles(_testPickupDir).Length);
+			string[] fileContent = File.ReadAllLines((Directory.GetFiles(_testPickupDir)[0]));
+			bool hasDateHeader = false;
+			const string dateHeaderStart = "Date: ";
+			foreach (string line in fileContent)
+			{
+				if(line.StartsWith(dateHeaderStart))
+				{
+					var datePart = line.Substring(dateHeaderStart.Length);
+					var date = DateTime.ParseExact(datePart, "r", CultureInfo.InvariantCulture);
+					var diff = Math.Abs( (DateTime.UtcNow - date).TotalMilliseconds);
+					Assert.LessOrEqual(diff, 1000, "Times should be equal, allowing a diff of one second to make test robust");
+					hasDateHeader = true;
+				}
+			}
+			Assert.IsTrue(hasDateHeader, "Output must contains a date header");
+
+			Assert.AreEqual("", sh.Message, "Unexpected error message");
 		}
 
 		/// <summary>
